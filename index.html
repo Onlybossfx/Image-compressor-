@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OptiFile | Browser-Based File Optimization</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">OptiFile</span>
+            </div>
+            <div class="nav-links">
+                <a href="#" class="nav-link active">Home</a>
+                <a href="#features" class="nav-link">Features</a>
+                <a href="#privacy" class="nav-link">Privacy</a>
+                <div class="theme-toggle">
+                    <button id="themeToggle" class="theme-btn" aria-label="Toggle theme">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                </div>
+            </div>
+            <button class="mobile-menu-btn" aria-label="Menu">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <h1 class="hero-title">Optimize Files Directly in Your Browser</h1>
+                <p class="hero-subtitle">Professional-grade image compression and file archiving. No uploads, no servers, complete privacy.</p>
+                <div class="hero-stats">
+                    <div class="stat">
+                        <span class="stat-number" id="filesProcessed">0</span>
+                        <span class="stat-label">Files Processed</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number" id="dataSaved">0</span>
+                        <span class="stat-label">MB Saved</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number">100%</span>
+                        <span class="stat-label">Client-Side</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Tools Selection -->
+    <main class="main-container">
+        <section class="tools-section">
+            <div class="section-header">
+                <h2 class="section-title">Select Optimization Tool</h2>
+                <p class="section-subtitle">Choose between our two specialized optimization tools</p>
+            </div>
+
+            <div class="tools-grid">
+                <!-- Image Compressor Card -->
+                <div class="tool-card" data-tool="image">
+                    <div class="card-header">
+                        <div class="card-icon">
+                            <i class="fas fa-compress-arrows-alt"></i>
+                        </div>
+                        <div class="card-badge">Recommended</div>
+                    </div>
+                    <div class="card-body">
+                        <h3 class="card-title">Image Compressor</h3>
+                        <p class="card-description">Reduce image file sizes while preserving visual quality. Supports JPEG, PNG, WebP, GIF.</p>
+                        <ul class="card-features">
+                            <li><i class="fas fa-check"></i> Batch processing</li>
+                            <li><i class="fas fa-check"></i> Quality control slider</li>
+                            <li><i class="fas fa-check"></i> Format conversion</li>
+                            <li><i class="fas fa-check"></i> EXIF data removal</li>
+                        </ul>
+                    </div>
+                    <div class="card-footer">
+                        <button class="card-action-btn" onclick="openTool('image')">
+                            <span>Open Compressor</span>
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- File Zipper Card -->
+                <div class="tool-card" data-tool="zip">
+                    <div class="card-header">
+                        <div class="card-icon">
+                            <i class="fas fa-file-archive"></i>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <h3 class="card-title">File Zipper</h3>
+                        <p class="card-description">Compress multiple files into organized ZIP archives with optional password protection.</p>
+                        <ul class="card-features">
+                            <li><i class="fas fa-check"></i> Multi-file support</li>
+                            <li><i class="fas fa-check"></i> Password protection</li>
+                            <li><i class="fas fa-check"></i> Folder structure</li>
+                            <li><i class="fas fa-check"></i> Compression levels</li>
+                        </ul>
+                    </div>
+                    <div class="card-footer">
+                        <button class="card-action-btn" onclick="openTool('zip')">
+                            <span>Open Zipper</span>
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section id="features" class="features-section">
+            <div class="section-header">
+                <h2 class="section-title">Why Choose OptiFile</h2>
+                <p class="section-subtitle">Professional features for modern workflows</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon security">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3 class="feature-title">Complete Privacy</h3>
+                    <p class="feature-description">All processing happens locally in your browser. Files never leave your device.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon speed">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <h3 class="feature-title">Instant Processing</h3>
+                    <p class="feature-description">Optimized Web Workers ensure fast processing without UI blocking.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon format">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <h3 class="feature-title">Wide Format Support</h3>
+                    <p class="feature-description">Support for all major image formats and comprehensive archive options.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon responsive">
+                        <i class="fas fa-mobile-alt"></i>
+                    </div>
+                    <h3 class="feature-title">Fully Responsive</h3>
+                    <p class="feature-description">Works seamlessly on desktop, tablet, and mobile devices.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works -->
+        <section class="workflow-section">
+            <div class="section-header">
+                <h2 class="section-title">How It Works</h2>
+                <p class="section-subtitle">Three simple steps to optimized files</p>
+            </div>
+            <div class="workflow-steps">
+                <div class="step">
+                    <div class="step-number">01</div>
+                    <h3 class="step-title">Select Tool</h3>
+                    <p class="step-description">Choose between image compression or file zipping based on your needs.</p>
+                </div>
+                <div class="step-connector">
+                    <div class="connector-line"></div>
+                    <div class="connector-arrow">→</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">02</div>
+                    <h3 class="step-title">Upload & Configure</h3>
+                    <p class="step-description">Drag & drop files, adjust settings, and preview changes in real-time.</p>
+                </div>
+                <div class="step-connector">
+                    <div class="connector-line"></div>
+                    <div class="connector-arrow">→</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">03</div>
+                    <h3 class="step-title">Download Results</h3>
+                    <p class="step-description">Get optimized files instantly with detailed savings report.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Privacy Section -->
+        <section id="privacy" class="privacy-section">
+            <div class="privacy-content">
+                <div class="privacy-icon">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+                <div class="privacy-text">
+                    <h2 class="privacy-title">Your Data Stays Yours</h2>
+                    <p class="privacy-description">
+                        OptiFile operates entirely in your browser using JavaScript. No files are uploaded to any server. 
+                        Your documents, images, and sensitive data remain on your device at all times.
+                    </p>
+                    <div class="privacy-badges">
+                        <span class="privacy-badge">
+                            <i class="fas fa-lock"></i> No Server Uploads
+                        </span>
+                        <span class="privacy-badge">
+                            <i class="fas fa-history"></i> No Data Retention
+                        </span>
+                        <span class="privacy-badge">
+                            <i class="fas fa-code"></i> Open Source
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-brand">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">OptiFile</span>
+            </div>
+            <p class="footer-tagline">Professional file optimization in your browser</p>
+            <div class="footer-links">
+                <a href="#" class="footer-link">GitHub</a>
+                <a href="#" class="footer-link">Documentation</a>
+                <a href="#" class="footer-link">Support</a>
+                <a href="#" class="footer-link">API</a>
+            </div>
+            <div class="footer-copyright">
+                <p>© 2023 OptiFile. All client-side processing.</p>
+                <p class="footer-note">Built with vanilla HTML, CSS, and JavaScript.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Tool Interfaces (Hidden Initially) -->
+    <div id="imageCompressor" class="tool-interface hidden">
+        <!-- Will be populated by JavaScript -->
+    </div>
+    <div id="fileZipper" class="tool-interface hidden">
+        <!-- Will be populated by JavaScript -->
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
