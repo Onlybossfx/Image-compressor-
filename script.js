@@ -4,9 +4,7 @@ const state = {
     compressedFiles: [],
     totalOriginalSize: 0,
     totalCompressedSize: 0,
-    isProcessing: false,
-    processingQueue: [],
-    currentProcessingIndex: 0
+    isProcessing: false
 };
 
 // ===== DOM ELEMENTS =====
@@ -106,7 +104,6 @@ function showToast(type, title, message, duration = 5000) {
     
     elements.toastContainer.appendChild(toast);
     
-    // Auto remove
     const removeToast = () => {
         toast.style.transform = 'translateX(100%)';
         toast.style.opacity = '0';
@@ -117,10 +114,7 @@ function showToast(type, title, message, duration = 5000) {
         }, 300);
     };
     
-    // Close button
     toast.querySelector('.toast-close').addEventListener('click', removeToast);
-    
-    // Auto remove after duration
     setTimeout(removeToast, duration);
 }
 
@@ -131,7 +125,10 @@ function addFiles(fileList) {
         !state.files.some(existing => existing.name === file.name && existing.size === file.size)
     );
     
-    if (newFiles.length === 0) return;
+    if (newFiles.length === 0) {
+        showToast('warning', 'No Valid Files', 'Please select valid image files (JPG, PNG, WebP, GIF)');
+        return;
+    }
     
     state.files.push(...newFiles);
     updateFileList();
@@ -144,7 +141,6 @@ function removeFile(index) {
     const file = state.files[index];
     state.files.splice(index, 1);
     
-    // Also remove compressed version if exists
     const compressedIndex = state.compressedFiles.findIndex(f => f.originalName === file.name);
     if (compressedIndex !== -1) {
         state.compressedFiles.splice(compressedIndex, 1);
@@ -154,6 +150,26 @@ function removeFile(index) {
     updateResultsTable();
     updateMetrics();
     updateComparisonViewer();
+}
+
+function previewFile(index) {
+    const file = state.files[index];
+    const url = URL.createObjectURL(file);
+    
+    elements.comparisonViewer.innerHTML = `
+        <div class="comparison-container">
+            <div class="comparison-item">
+                <div class="comparison-label">Preview (${formatFileSize(file.size)})</div>
+                <div class="comparison-image">
+                    <img src="${url}" alt="Preview">
+                </div>
+            </div>
+        </div>
+    `;
+    
+    showToast('info', 'Image Preview', `Previewing ${file.name}`);
+    
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 function updateFileList() {
@@ -193,7 +209,6 @@ function updateFileList() {
         elements.fileList.appendChild(fileItem);
     });
     
-    // Add event listeners
     document.querySelectorAll('[data-action="remove"]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const index = parseInt(e.target.closest('button').dataset.index);
@@ -242,7 +257,7 @@ async function compressImage(file, options, index, total) {
         updateLoadingProgress(index + 1, total, file.name);
         
         const compressionOptions = {
-            maxSizeMB: options.maxSizeMB || 20,
+            maxSizeMB: 20,
             maxWidthOrHeight: options.maxWidth || undefined,
             useWebWorker: true,
             maxIteration: options.compressionLevel || 4,
@@ -253,20 +268,12 @@ async function compressImage(file, options, index, total) {
         
         const compressedFile = await imageCompression(file, compressionOptions);
         
-        // Handle format conversion if needed
-        let finalFile = compressedFile;
         const format = document.querySelector('.format-btn.active').dataset.format;
         
-        if (format !== 'original') {
-            // In a real implementation, you would convert the format here
-            // For now, we'll just use the compressed file
-            finalFile = compressedFile;
-        }
-        
         return {
-            file: finalFile,
+            file: compressedFile,
             originalSize: file.size,
-            compressedSize: finalFile.size,
+            compressedSize: compressedFile.size,
             originalName: file.name,
             format: format
         };
@@ -276,20 +283,16 @@ async function compressImage(file, options, index, total) {
     }
 }
 
-async processAllImages() {
+async function processAllImages() {
     if (state.files.length === 0 || state.isProcessing) return;
     
     state.isProcessing = true;
     state.compressedFiles = [];
-    state.totalOriginalSize = 0;
-    state.totalCompressedSize = 0;
     
-    // Show loading
     elements.loadingOverlay.classList.add('active');
     elements.compressBtn.disabled = true;
     elements.compressBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
     
-    // Get compression options
     const options = {
         quality: parseInt(elements.qualitySlider.value),
         maxWidth: parseInt(elements.maxWidthSlider.value),
@@ -306,17 +309,11 @@ async processAllImages() {
                 const result = await compressImage(file, options, i, state.files.length);
                 state.compressedFiles.push(result);
                 
-                // Update running totals
-                state.totalOriginalSize += result.originalSize;
-                state.totalCompressedSize += result.compressedSize;
-                
-                // Update results table in real-time
                 updateResultsTable();
                 updateMetrics();
                 
             } catch (error) {
                 console.error(`Failed to compress ${file.name}:`, error);
-                // Add error entry
                 state.compressedFiles.push({
                     error: true,
                     originalName: file.name,
@@ -325,18 +322,17 @@ async processAllImages() {
             }
         }
         
-        // Complete
         updateComparisonViewer();
         updateMetrics();
         elements.downloadAllBtn.disabled = false;
         
+        const successful = state.compressedFiles.filter(f => !f.error).length;
         showToast('success', 'Compression Complete', 
-            `Compressed ${state.compressedFiles.length} image${state.compressedFiles.length > 1 ? 's' : ''} successfully`);
+            `Compressed ${successful} image${successful > 1 ? 's' : ''} successfully`);
         
     } catch (error) {
         showToast('error', 'Compression Failed', 'An error occurred during compression');
     } finally {
-        // Hide loading
         elements.loadingOverlay.classList.remove('active');
         elements.compressBtn.disabled = false;
         elements.compressBtn.innerHTML = '<i class="fas fa-compress-alt"></i> Compress All Images';
@@ -405,7 +401,7 @@ function updateResultsTable() {
 }
 
 function updateComparisonViewer() {
-    if (state.compressedFiles.length === 0 || state.compressedFiles.some(f => f.error)) {
+    if (state.compressedFiles.length === 0 || state.compressedFiles.every(f => f.error)) {
         elements.comparisonViewer.innerHTML = `
             <div class="comparison-placeholder">
                 <i class="fas fa-exchange-alt"></i>
@@ -415,24 +411,36 @@ function updateComparisonViewer() {
         return;
     }
     
-    // Show first successful compression
     const firstSuccess = state.compressedFiles.find(f => !f.error);
     if (!firstSuccess) return;
+    
+    const originalFile = state.files.find(f => f.name === firstSuccess.originalName);
+    
+    if (!originalFile || !firstSuccess.file) {
+        elements.comparisonViewer.innerHTML = `
+            <div class="comparison-placeholder">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Could not load comparison</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const originalUrl = URL.createObjectURL(originalFile);
+    const compressedUrl = URL.createObjectURL(firstSuccess.file);
     
     elements.comparisonViewer.innerHTML = `
         <div class="comparison-container">
             <div class="comparison-item">
                 <div class="comparison-label">Original (${formatFileSize(firstSuccess.originalSize)})</div>
                 <div class="comparison-image">
-                    <img src="${URL.createObjectURL(state.files.find(f => f.name === firstSuccess.originalName))}" 
-                         alt="Original">
+                    <img src="${originalUrl}" alt="Original" onload="URL.revokeObjectURL(this.src)">
                 </div>
             </div>
             <div class="comparison-item">
                 <div class="comparison-label">Compressed (${formatFileSize(firstSuccess.compressedSize)})</div>
                 <div class="comparison-image">
-                    <img src="${URL.createObjectURL(firstSuccess.file)}" 
-                         alt="Compressed">
+                    <img src="${compressedUrl}" alt="Compressed" onload="URL.revokeObjectURL(this.src)">
                 </div>
             </div>
         </div>
@@ -440,28 +448,29 @@ function updateComparisonViewer() {
 }
 
 function updateMetrics() {
-    // Update savings
+    state.totalOriginalSize = state.compressedFiles.reduce((sum, file) => 
+        file.error ? sum : sum + file.originalSize, 0);
+    state.totalCompressedSize = state.compressedFiles.reduce((sum, file) => 
+        file.error ? sum : sum + file.compressedSize, 0);
+    
     const savings = calculateSavings(state.totalOriginalSize, state.totalCompressedSize);
     elements.savingsValue.textContent = formatFileSize(savings.size);
     elements.savingsPercent.textContent = formatPercentage(savings.percentage);
     
-    // Update data processed
     elements.totalData.textContent = formatFileSize(state.totalOriginalSize);
     
-    // Update average compression
-    const avg = state.compressedFiles.length > 0 && !state.compressedFiles.every(f => f.error) ? 
-        savings.percentage : 0;
+    const successfulCompressions = state.compressedFiles.filter(f => !f.error);
+    const avg = successfulCompressions.length > 0 ? 
+        successfulCompressions.reduce((sum, file) => 
+            sum + ((file.originalSize - file.compressedSize) / file.originalSize * 100), 0) / successfulCompressions.length : 0;
     elements.avgCompression.textContent = formatPercentage(avg);
     
-    // Update time saved (estimate: 1MB = 1 second of download time)
     const timeSavedSeconds = Math.round(savings.size / (1024 * 1024));
     elements.timeSaved.textContent = `${timeSavedSeconds}s`;
     
-    // Update memory usage (rough estimate)
     const memoryUsed = (state.totalOriginalSize + state.totalCompressedSize) / (1024 * 1024);
     elements.memoryUsage.textContent = memoryUsed.toFixed(1) + ' MB';
     
-    // Update performance score
     const score = Math.min(100, Math.max(0, 100 - (memoryUsed / 10)));
     elements.performanceScore.textContent = Math.round(score) + '%';
 }
@@ -473,13 +482,13 @@ function downloadAllCompressed() {
         return;
     }
     
-    // For multiple files, create a ZIP
-    if (state.compressedFiles.length > 1) {
+    const successfulFiles = state.compressedFiles.filter(f => !f.error);
+    
+    if (successfulFiles.length > 1) {
         createAndDownloadZip();
     } else {
-        // Single file download
-        const result = state.compressedFiles[0];
-        if (!result.error) {
+        const result = successfulFiles[0];
+        if (result && result.file) {
             downloadFile(result.file, `compressed_${result.originalName}`);
         }
     }
@@ -493,7 +502,6 @@ function downloadFile(file, filename) {
     link.click();
     document.body.removeChild(link);
     
-    // Clean up URL
     setTimeout(() => URL.revokeObjectURL(link.href), 100);
 }
 
@@ -502,30 +510,39 @@ async function createAndDownloadZip() {
         elements.downloadAllBtn.disabled = true;
         elements.downloadAllBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating ZIP...';
         
-        // Load JSZip dynamically if needed
         if (typeof JSZip === 'undefined') {
             await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
         }
         
         const zip = new JSZip();
+        const successfulFiles = state.compressedFiles.filter(f => !f.error && f.file);
         
-        state.compressedFiles.forEach((result, index) => {
-            if (!result.error) {
-                const extension = result.format === 'original' ? 
-                    result.originalName.split('.').pop() : result.format;
-                const filename = `compressed_${result.originalName.replace(/\.[^/.]+$/, "")}.${extension}`;
-                zip.file(filename, result.file);
-            }
+        successfulFiles.forEach((result) => {
+            const extension = result.format === 'original' ? 
+                result.originalName.split('.').pop() : result.format;
+            const filename = `compressed_${result.originalName.replace(/\.[^/.]+$/, "")}.${extension}`;
+            zip.file(filename, result.file);
         });
         
+        if (Object.keys(zip.files).length === 0) {
+            throw new Error('No valid files to compress');
+        }
+        
         const content = await zip.generateAsync({ type: 'blob' });
-        downloadFile(content, 'compressed_images.zip');
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(content);
+        link.download = 'compressed_images.zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        setTimeout(() => URL.revokeObjectURL(link.href), 100);
         
         showToast('success', 'Download Complete', 'All compressed files downloaded as ZIP');
         
     } catch (error) {
         console.error('ZIP creation failed:', error);
-        showToast('error', 'Download Failed', 'Failed to create ZIP file');
+        showToast('error', 'Download Failed', error.message || 'Failed to create ZIP file');
     } finally {
         elements.downloadAllBtn.disabled = false;
         elements.downloadAllBtn.innerHTML = '<i class="fas fa-download"></i> Download All';
@@ -560,7 +577,9 @@ function initEventListeners() {
     elements.dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         elements.dropZone.classList.remove('dragover');
-        addFiles(e.dataTransfer.files);
+        if (e.dataTransfer.files.length) {
+            addFiles(e.dataTransfer.files);
+        }
     });
     
     // Click to browse
@@ -589,7 +608,6 @@ function initEventListeners() {
 }
 
 function initPerformanceMonitoring() {
-    // Update memory usage periodically
     setInterval(() => {
         if (performance.memory) {
             const usedMB = performance.memory.usedJSHeapSize / (1024 * 1024);
@@ -600,21 +618,13 @@ function initPerformanceMonitoring() {
 
 // ===== MAIN INIT =====
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize settings
     updateSliderValues();
     initFormatButtons();
     initAdvancedToggle();
-    
-    // Initialize event listeners
     initEventListeners();
-    
-    // Initialize performance monitoring
     initPerformanceMonitoring();
-    
-    // Initial metrics update
     updateMetrics();
     
-    // Show welcome toast
     setTimeout(() => {
         showToast('info', 'Welcome to PixelPress', 
             'Drag & drop images to start compressing. All processing happens in your browser.', 
@@ -627,13 +637,3 @@ window.addEventListener('error', (event) => {
     console.error('Global error:', event.error);
     showToast('error', 'Application Error', 'An unexpected error occurred. Please refresh the page.');
 });
-
-// ===== PWA SUPPORT =====
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(error => {
-            console.log('ServiceWorker registration failed:', error);
-        });
-    });
-}
-
