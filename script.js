@@ -1,3 +1,70 @@
+// ===== URL API POLYFILL =====
+// Ensure URL API exists with safe methods
+(function() {
+    if (!window.URL) {
+        window.URL = window.URL || window.webkitURL || window.mozURL || window.msURL || {};
+    }
+    
+    if (!URL.createObjectURL) {
+        URL.createObjectURL = function(object) {
+            try {
+                // Fallback for browsers that don't support createObjectURL
+                if (object instanceof Blob) {
+                    return window.URL ? window.URL.createObjectURL(object) : object;
+                }
+                return object;
+            } catch (e) {
+                console.error('Error creating object URL:', e);
+                return '#';
+            }
+        };
+    }
+    
+    if (!URL.revokeObjectURL) {
+        URL.revokeObjectURL = function(url) {
+            // Safe no-op for browsers that don't support revokeObjectURL
+            try {
+                if (url && url.startsWith('blob:') && window.URL && window.URL.revokeObjectURL) {
+                    window.URL.revokeObjectURL(url);
+                }
+            } catch (e) {
+                console.warn('Error revoking object URL:', e);
+            }
+        };
+    }
+})();
+
+// ===== SAFE URL UTILITIES =====
+function safeCreateObjectURL(object) {
+    try {
+        const URLObject = window.URL || window.webkitURL || window.mozURL || window.msURL || {};
+        if (URLObject && URLObject.createObjectURL) {
+            return URLObject.createObjectURL(object);
+        }
+        // Fallback for unsupported browsers
+        if (object instanceof Blob) {
+            return '#';
+        }
+        return object;
+    } catch (error) {
+        console.error('Error creating object URL:', error);
+        return '#';
+    }
+}
+
+function safeRevokeObjectURL(url) {
+    try {
+        const URLObject = window.URL || window.webkitURL || window.mozURL || window.msURL || {};
+        if (URLObject && URLObject.revokeObjectURL && typeof URLObject.revokeObjectURL === 'function') {
+            if (url && url.startsWith('blob:')) {
+                URLObject.revokeObjectURL(url);
+            }
+        }
+    } catch (error) {
+        console.warn('Error revoking object URL:', error);
+    }
+}
+
 // ===== APP STATE =====
 const state = {
     files: [],
@@ -154,7 +221,12 @@ function removeFile(index) {
 
 function previewFile(index) {
     const file = state.files[index];
-    const url = URL.createObjectURL(file);
+    const url = safeCreateObjectURL(file);
+    
+    if (!url || url === '#') {
+        showToast('error', 'Preview Error', 'Could not create preview for this file');
+        return;
+    }
     
     elements.comparisonViewer.innerHTML = `
         <div class="comparison-container">
@@ -169,7 +241,8 @@ function previewFile(index) {
     
     showToast('info', 'Image Preview', `Previewing ${file.name}`);
     
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    // Safe cleanup after 5 seconds
+    setTimeout(() => safeRevokeObjectURL(url), 5000);
 }
 
 function updateFileList() {
@@ -426,25 +499,52 @@ function updateComparisonViewer() {
         return;
     }
     
-    const originalUrl = URL.createObjectURL(originalFile);
-    const compressedUrl = URL.createObjectURL(firstSuccess.file);
+    const originalUrl = safeCreateObjectURL(originalFile);
+    const compressedUrl = safeCreateObjectURL(firstSuccess.file);
+    
+    // Check if URLs were created successfully
+    if (!originalUrl || originalUrl === '#' || !compressedUrl || compressedUrl === '#') {
+        elements.comparisonViewer.innerHTML = `
+            <div class="comparison-placeholder">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Could not create image previews</p>
+            </div>
+        `;
+        return;
+    }
     
     elements.comparisonViewer.innerHTML = `
         <div class="comparison-container">
             <div class="comparison-item">
                 <div class="comparison-label">Original (${formatFileSize(firstSuccess.originalSize)})</div>
                 <div class="comparison-image">
-                    <img src="${originalUrl}" alt="Original" onload="URL.revokeObjectURL(this.src)">
+                    <img src="${originalUrl}" alt="Original">
                 </div>
             </div>
             <div class="comparison-item">
                 <div class="comparison-label">Compressed (${formatFileSize(firstSuccess.compressedSize)})</div>
                 <div class="comparison-image">
-                    <img src="${compressedUrl}" alt="Compressed" onload="URL.revokeObjectURL(this.src)">
+                    <img src="${compressedUrl}" alt="Compressed">
                 </div>
             </div>
         </div>
     `;
+    
+    // Clean up object URLs when images are loaded
+    const originalImg = elements.comparisonViewer.querySelector('img[alt="Original"]');
+    const compressedImg = elements.comparisonViewer.querySelector('img[alt="Compressed"]');
+    
+    if (originalImg) {
+        originalImg.onload = function() {
+            setTimeout(() => safeRevokeObjectURL(originalUrl), 1000);
+        };
+    }
+    
+    if (compressedImg) {
+        compressedImg.onload = function() {
+            setTimeout(() => safeRevokeObjectURL(compressedUrl), 1000);
+        };
+    }
 }
 
 function updateMetrics() {
@@ -495,14 +595,24 @@ function downloadAllCompressed() {
 }
 
 function downloadFile(file, filename) {
+    const url = safeCreateObjectURL(file);
+    if (!url || url === '#') {
+        showToast('error', 'Download Error', 'Could not create download link');
+        return;
+    }
+    
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(file);
+    link.href = url;
     link.download = filename;
+    link.style.display = 'none';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
     
-    setTimeout(() => URL.revokeObjectURL(link.href), 100);
+    // Cleanup
+    setTimeout(() => {
+        document.body.removeChild(link);
+        safeRevokeObjectURL(url);
+    }, 100);
 }
 
 async function createAndDownloadZip() {
@@ -529,14 +639,23 @@ async function createAndDownloadZip() {
         }
         
         const content = await zip.generateAsync({ type: 'blob' });
+        const url = safeCreateObjectURL(content);
+        if (!url || url === '#') {
+            throw new Error('Could not create download link');
+        }
+        
         const link = document.createElement('a');
-        link.href = URL.createObjectURL(content);
+        link.href = url;
         link.download = 'compressed_images.zip';
+        link.style.display = 'none';
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
         
-        setTimeout(() => URL.revokeObjectURL(link.href), 100);
+        // Cleanup
+        setTimeout(() => {
+            document.body.removeChild(link);
+            safeRevokeObjectURL(url);
+        }, 100);
         
         showToast('success', 'Download Complete', 'All compressed files downloaded as ZIP');
         
@@ -567,15 +686,19 @@ function initEventListeners() {
     // Drag and drop
     elements.dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
+        e.stopPropagation();
         elements.dropZone.classList.add('dragover');
     });
     
-    elements.dropZone.addEventListener('dragleave', () => {
+    elements.dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         elements.dropZone.classList.remove('dragover');
     });
     
     elements.dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
+        e.stopPropagation();
         elements.dropZone.classList.remove('dragover');
         if (e.dataTransfer.files.length) {
             addFiles(e.dataTransfer.files);
@@ -608,12 +731,17 @@ function initEventListeners() {
 }
 
 function initPerformanceMonitoring() {
-    setInterval(() => {
-        if (performance.memory) {
-            const usedMB = performance.memory.usedJSHeapSize / (1024 * 1024);
-            elements.memoryUsage.textContent = usedMB.toFixed(1) + ' MB';
-        }
-    }, 5000);
+    // Only run if performance.memory is available (Chrome only)
+    if (performance && performance.memory) {
+        setInterval(() => {
+            try {
+                const usedMB = performance.memory.usedJSHeapSize / (1024 * 1024);
+                elements.memoryUsage.textContent = usedMB.toFixed(1) + ' MB';
+            } catch (e) {
+                // Silently fail if memory API is not accessible
+            }
+        }, 5000);
+    }
 }
 
 // ===== MAIN INIT =====
@@ -635,5 +763,16 @@ document.addEventListener('DOMContentLoaded', () => {
 // ===== ERROR HANDLING =====
 window.addEventListener('error', (event) => {
     console.error('Global error:', event.error);
+    // Don't show toast for URL.revokeObjectURL errors specifically
+    if (event.error && event.error.message && event.error.message.includes('revokeObjectURL')) {
+        console.warn('Ignoring revokeObjectURL error');
+        return;
+    }
     showToast('error', 'Application Error', 'An unexpected error occurred. Please refresh the page.');
+});
+
+// Prevent unhandled promise rejections from showing errors
+window.addEventListener('unhandledrejection', (event) => {
+    console.warn('Unhandled promise rejection:', event.reason);
+    event.preventDefault();
 });
