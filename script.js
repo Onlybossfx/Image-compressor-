@@ -1,976 +1,66 @@
-// ===== DOM Elements & State =====
-const themeToggle = document.getElementById('themeToggle');
-const themeIcon = themeToggle?.querySelector('i');
-const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
-const navLinks = document.querySelector('.nav-links');
-const filesProcessed = document.getElementById('filesProcessed');
-const dataSaved = document.getElementById('dataSaved');
+// ===== APP STATE =====
+const state = {
+    files: [],
+    compressedFiles: [],
+    totalOriginalSize: 0,
+    totalCompressedSize: 0,
+    isProcessing: false,
+    processingQueue: [],
+    currentProcessingIndex: 0
+};
 
-// State
-let imageFiles = [];
-let zipFiles = [];
-let compressedResults = [];
-let currentZipBlob = null;
+// ===== DOM ELEMENTS =====
+const elements = {
+    // File Input
+    fileInput: document.getElementById('fileInput'),
+    dropZone: document.getElementById('dropZone'),
+    fileList: document.getElementById('fileList'),
+    
+    // Settings
+    qualitySlider: document.getElementById('quality'),
+    qualityValue: document.getElementById('qualityValue'),
+    maxWidthSlider: document.getElementById('maxWidth'),
+    widthValue: document.getElementById('widthValue'),
+    formatButtons: document.querySelectorAll('.format-btn'),
+    compressionLevel: document.getElementById('compressionLevel'),
+    preserveExif: document.getElementById('preserveExif'),
+    maintainAspect: document.getElementById('maintainAspect'),
+    
+    // Advanced Settings
+    advancedToggle: document.getElementById('advancedToggle'),
+    advancedSettings: document.getElementById('advancedSettings'),
+    
+    // Action Buttons
+    clearAllBtn: document.getElementById('clearAll'),
+    compressBtn: document.getElementById('compressBtn'),
+    downloadAllBtn: document.getElementById('downloadAll'),
+    
+    // Results
+    comparisonViewer: document.getElementById('comparisonViewer'),
+    resultsBody: document.getElementById('resultsBody'),
+    totalSavings: document.getElementById('totalSavings'),
+    savingsValue: document.querySelector('.savings-value'),
+    savingsPercent: document.querySelector('.savings-percent'),
+    
+    // Metrics
+    totalData: document.getElementById('totalData'),
+    avgCompression: document.getElementById('avgCompression'),
+    timeSaved: document.getElementById('timeSaved'),
+    memoryUsage: document.getElementById('memoryUsage'),
+    performanceScore: document.getElementById('performanceScore'),
+    
+    // Loading
+    loadingOverlay: document.getElementById('loadingOverlay'),
+    loadingText: document.getElementById('loadingText'),
+    progressBar: document.getElementById('progressBar'),
+    currentFile: document.getElementById('currentFile'),
+    progressPercent: document.getElementById('progressPercent'),
+    
+    // Toast
+    toastContainer: document.getElementById('toastContainer')
+};
 
-// ===== Theme Management =====
-function initializeTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    updateThemeIcon(savedTheme);
-}
-
-function toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
-    updateThemeIcon(newTheme);
-}
-
-function updateThemeIcon(theme) {
-    if (themeIcon) {
-        themeIcon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-    }
-}
-
-// ===== Mobile Menu Fix =====
-function toggleMobileMenu() {
-    navLinks.classList.toggle('show');
-}
-
-function closeMobileMenu() {
-    navLinks.classList.remove('show');
-}
-
-// ===== Statistics Animation =====
-function animateStatistics() {
-    const options = {
-        threshold: 0.5
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                animateCounter(filesProcessed, 12468, 123, 30);
-                animateCounter(dataSaved, 874.2, 8.7, 30, true);
-                observer.unobserve(entry.target);
-            }
-        });
-    }, options);
-
-    const heroSection = document.querySelector('.hero');
-    if (heroSection) {
-        observer.observe(heroSection);
-    }
-}
-
-function animateCounter(element, target, step, interval, isDecimal = false) {
-    let count = 0;
-    const counter = setInterval(() => {
-        count += step;
-        if (count >= target) {
-            count = target;
-            clearInterval(counter);
-        }
-        element.textContent = isDecimal ? count.toFixed(1) : Math.floor(count).toLocaleString();
-    }, interval);
-}
-
-// ===== Tool Management =====
-function openTool(toolType) {
-    closeMobileMenu();
-    
-    // Hide main content
-    document.querySelector('.navbar').classList.add('hidden');
-    document.querySelector('.hero').classList.add('hidden');
-    document.querySelector('.main-container').classList.add('hidden');
-    document.querySelector('.footer').classList.add('hidden');
-
-    // Show selected tool
-    if (toolType === 'image') {
-        showImageCompressor();
-    } else if (toolType === 'zip') {
-        showFileZipper();
-    }
-}
-
-function closeTool() {
-    // Hide all tool interfaces
-    document.querySelectorAll('.tool-interface').forEach(tool => {
-        tool.classList.add('hidden');
-        tool.innerHTML = '';
-    });
-
-    // Show main content
-    document.querySelector('.navbar').classList.remove('hidden');
-    document.querySelector('.hero').classList.remove('hidden');
-    document.querySelector('.main-container').classList.remove('hidden');
-    document.querySelector('.footer').classList.remove('hidden');
-}
-
-// ===== Image Compression Tool =====
-function showImageCompressor() {
-    const toolHTML = `
-        <div class="tool-container">
-            <div class="tool-header">
-                <button onclick="closeTool()" class="back-btn">
-                    <i class="fas fa-arrow-left"></i>
-                    Back to Home
-                </button>
-                <h2><i class="fas fa-compress-arrows-alt"></i> Image Compressor</h2>
-                <p class="tool-subtitle">Upload images to compress them. All processing happens in your browser.</p>
-            </div>
-            
-            <div class="tool-content">
-                <div class="upload-section">
-                    <div class="upload-zone" id="imageUploadZone" onclick="document.getElementById('imageInput').click()">
-                        <i class="fas fa-cloud-upload-alt"></i>
-                        <h3>Drop Images Here</h3>
-                        <p>or click to browse (JPEG, PNG, WebP, GIF)</p>
-                        <p class="file-limit">Max 20 images, 10MB each</p>
-                        <input type="file" id="imageInput" multiple accept="image/*">
-                    </div>
-                    <div class="file-list" id="imageFileList">
-                        <div class="empty-state">
-                            <i class="fas fa-images"></i>
-                            <p>No images selected</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="settings-section">
-                    <h3>Compression Settings</h3>
-                    <div class="settings-grid">
-                        <div class="setting">
-                            <label for="quality">Quality: <span id="qualityValue">80</span>%</label>
-                            <div class="slider-container">
-                                <input type="range" id="quality" min="10" max="100" value="80" class="slider">
-                                <div class="slider-ticks">
-                                    <span>Low</span>
-                                    <span>Medium</span>
-                                    <span>High</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="setting">
-                            <label for="maxWidth">Max Width (px):</label>
-                            <input type="number" id="maxWidth" min="100" max="5000" value="1920" class="number-input">
-                        </div>
-                        <div class="setting">
-                            <label for="outputFormat">Output Format:</label>
-                            <select id="outputFormat" class="select-input">
-                                <option value="original">Keep Original</option>
-                                <option value="jpeg">JPEG</option>
-                                <option value="png">PNG</option>
-                                <option value="webp">WebP</option>
-                            </select>
-                        </div>
-                        <div class="setting checkbox-group">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="removeMetadata" checked>
-                                <span class="checkbox-custom"></span>
-                                Remove EXIF Metadata
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="preserveTransparency" checked>
-                                <span class="checkbox-custom"></span>
-                                Preserve Transparency
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="actions-section">
-                    <button id="compressBtn" class="primary-btn" disabled>
-                        <i class="fas fa-compress-arrows-alt"></i>
-                        Compress Images (<span id="fileCount">0</span>)
-                    </button>
-                    <button id="clearBtn" class="secondary-btn">
-                        <i class="fas fa-trash"></i>
-                        Clear All
-                    </button>
-                </div>
-                
-                <div class="results-section" id="resultsSection">
-                    <div class="section-header">
-                        <h3>Compression Results</h3>
-                        <div class="summary-stats">
-                            <span id="totalSavings">0 KB saved</span>
-                            <span id="compressionRatio">0%</span>
-                        </div>
-                    </div>
-                    <div id="resultsList" class="results-list"></div>
-                    <div class="download-actions">
-                        <button id="downloadAllBtn" class="primary-btn" disabled>
-                            <i class="fas fa-download"></i>
-                            Download All (<span id="resultCount">0</span>)
-                        </button>
-                        <button id="newBatchBtn" class="secondary-btn">
-                            <i class="fas fa-plus"></i>
-                            New Batch
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    const container = document.getElementById('imageCompressor');
-    container.innerHTML = toolHTML;
-    container.classList.remove('hidden');
-    setupImageCompressor();
-}
-
-function setupImageCompressor() {
-    imageFiles = [];
-    compressedResults = [];
-    
-    const imageInput = document.getElementById('imageInput');
-    const imageUploadZone = document.getElementById('imageUploadZone');
-    const imageFileList = document.getElementById('imageFileList');
-    const qualitySlider = document.getElementById('quality');
-    const qualityValue = document.getElementById('qualityValue');
-    const compressBtn = document.getElementById('compressBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const resultsSection = document.getElementById('resultsSection');
-    const downloadAllBtn = document.getElementById('downloadAllBtn');
-    const newBatchBtn = document.getElementById('newBatchBtn');
-    
-    // File upload handling
-    imageInput.addEventListener('change', handleImageFiles);
-    
-    // Drag and drop
-    imageUploadZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        imageUploadZone.classList.add('dragover');
-    });
-    
-    imageUploadZone.addEventListener('dragleave', () => {
-        imageUploadZone.classList.remove('dragover');
-    });
-    
-    imageUploadZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        imageUploadZone.classList.remove('dragover');
-        const files = Array.from(e.dataTransfer.files).filter(file => 
-            file.type.startsWith('image/')
-        );
-        handleImageFiles({ target: { files } });
-    });
-    
-    // Quality slider
-    qualitySlider.addEventListener('input', (e) => {
-        qualityValue.textContent = e.target.value;
-    });
-    
-    // Compress button
-    compressBtn.addEventListener('click', compressImages);
-    
-    // Clear button
-    clearBtn.addEventListener('click', () => {
-        imageFiles = [];
-        compressedResults = [];
-        updateImageFileList();
-        compressBtn.disabled = true;
-        resultsSection.style.display = 'none';
-        updateFileCount();
-    });
-    
-    // Download all button
-    downloadAllBtn.addEventListener('click', downloadAllCompressed);
-    
-    // New batch button
-    newBatchBtn.addEventListener('click', () => {
-        compressedResults = [];
-        resultsSection.style.display = 'none';
-        updateFileCount();
-    });
-    
-    function handleImageFiles(e) {
-        const newFiles = Array.from(e.target.files);
-        
-        // Filter valid image files
-        const validFiles = newFiles.filter(file => {
-            if (!file.type.startsWith('image/')) {
-                showToast('Only image files are allowed', 'error');
-                return false;
-            }
-            if (file.size > 10 * 1024 * 1024) {
-                showToast(`${file.name} exceeds 10MB limit`, 'error');
-                return false;
-            }
-            return true;
-        });
-        
-        if (validFiles.length === 0) return;
-        
-        // Add to imageFiles
-        validFiles.forEach(file => {
-            file.id = Date.now() + Math.random();
-            imageFiles.push(file);
-        });
-        
-        // Update UI
-        updateImageFileList();
-        compressBtn.disabled = imageFiles.length === 0;
-        updateFileCount();
-        
-        // Reset input
-        imageInput.value = '';
-    }
-    
-    function updateImageFileList() {
-        const emptyState = imageFileList.querySelector('.empty-state');
-        
-        if (imageFiles.length === 0) {
-            imageFileList.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-images"></i>
-                    <p>No images selected</p>
-                </div>
-            `;
-            return;
-        }
-        
-        if (emptyState) emptyState.remove();
-        
-        imageFileList.innerHTML = imageFiles.map(file => `
-            <div class="file-item" data-id="${file.id}">
-                <div class="file-info">
-                    <i class="fas fa-file-image"></i>
-                    <div class="file-details">
-                        <span class="file-name">${file.name}</span>
-                        <span class="file-size">${formatFileSize(file.size)}</span>
-                    </div>
-                </div>
-                <button class="file-remove" onclick="removeImageFile('${file.id}')">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        `).join('');
-    }
-    
-    function updateFileCount() {
-        const countElement = document.getElementById('fileCount');
-        const resultCountElement = document.getElementById('resultCount');
-        if (countElement) countElement.textContent = imageFiles.length;
-        if (resultCountElement) resultCountElement.textContent = compressedResults.length;
-    }
-    
-    async function compressImages() {
-        if (imageFiles.length === 0) return;
-        
-        compressBtn.disabled = true;
-        compressBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-        
-        const quality = parseInt(qualitySlider.value) / 100;
-        const maxWidth = parseInt(document.getElementById('maxWidth').value);
-        const outputFormat = document.getElementById('outputFormat').value;
-        const preserveTransparency = document.getElementById('preserveTransparency').checked;
-        
-        compressedResults = [];
-        
-        for (let i = 0; i < imageFiles.length; i++) {
-            const file = imageFiles[i];
-            try {
-                const result = await compressImage(file, quality, maxWidth, outputFormat, preserveTransparency);
-                compressedResults.push(result);
-                
-                // Update progress
-                const progress = Math.round((i + 1) / imageFiles.length * 100);
-                compressBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Processing... ${progress}%`;
-            } catch (error) {
-                console.error('Error compressing image:', error);
-                showToast(`Failed to compress ${file.name}`, 'error');
-            }
-        }
-        
-        // Update UI with results
-        updateResults();
-        resultsSection.style.display = 'block';
-        downloadAllBtn.disabled = compressedResults.length === 0;
-        
-        // Reset button
-        compressBtn.disabled = false;
-        compressBtn.innerHTML = '<i class="fas fa-compress-arrows-alt"></i> Compress Images';
-    }
-    
-    async function compressImage(file, quality, maxWidth, outputFormat, preserveTransparency) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            const reader = new FileReader();
-            
-            reader.onload = (e) => {
-                img.src = e.target.result;
-                
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    
-                    // Calculate new dimensions
-                    let width = img.width;
-                    let height = img.height;
-                    
-                    if (width > maxWidth) {
-                        height = (height * maxWidth) / width;
-                        width = maxWidth;
-                    }
-                    
-                    canvas.width = width;
-                    canvas.height = height;
-                    
-                    // Preserve transparency for PNG
-                    if (preserveTransparency && (file.type === 'image/png' || outputFormat === 'png')) {
-                        ctx.clearRect(0, 0, width, height);
-                    }
-                    
-                    // Draw image
-                    ctx.drawImage(img, 0, 0, width, height);
-                    
-                    // Determine output format
-                    let mimeType = file.type;
-                    if (outputFormat !== 'original') {
-                        mimeType = `image/${outputFormat}`;
-                    }
-                    
-                    // Convert to blob
-                    canvas.toBlob((blob) => {
-                        const compressedFile = new File([blob], 
-                            `${file.name.replace(/\.[^/.]+$/, "")}_compressed.${outputFormat === 'original' ? file.name.split('.').pop() : outputFormat}`,
-                            { type: mimeType }
-                        );
-                        
-                        const originalSize = file.size;
-                        const compressedSize = blob.size;
-                        const savings = originalSize - compressedSize;
-                        const ratio = Math.round((savings / originalSize) * 100);
-                        
-                        resolve({
-                            original: file,
-                            compressed: compressedFile,
-                            originalSize,
-                            compressedSize,
-                            savings,
-                            ratio
-                        });
-                    }, mimeType, quality);
-                };
-                
-                img.onerror = reject;
-            };
-            
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
-    }
-    
-    function updateResults() {
-        const resultsList = document.getElementById('resultsList');
-        const totalSavings = document.getElementById('totalSavings');
-        const compressionRatio = document.getElementById('compressionRatio');
-        
-        if (compressedResults.length === 0) {
-            resultsList.innerHTML = '<div class="empty-state"><p>No results yet</p></div>';
-            return;
-        }
-        
-        // Calculate totals
-        const totalOriginal = compressedResults.reduce((sum, r) => sum + r.originalSize, 0);
-        const totalCompressed = compressedResults.reduce((sum, r) => sum + r.compressedSize, 0);
-        const totalSavingsBytes = totalOriginal - totalCompressed;
-        const avgRatio = Math.round((totalSavingsBytes / totalOriginal) * 100);
-        
-        // Update summary
-        totalSavings.textContent = `${formatFileSize(totalSavingsBytes)} saved`;
-        compressionRatio.textContent = `${avgRatio}% reduction`;
-        
-        // Update results list
-        resultsList.innerHTML = compressedResults.map(result => `
-            <div class="result-item">
-                <div class="result-info">
-                    <div class="result-name">
-                        <i class="fas fa-file-image"></i>
-                        <span>${result.compressed.name}</span>
-                    </div>
-                    <div class="result-stats">
-                        <span class="original-size">${formatFileSize(result.originalSize)}</span>
-                        <i class="fas fa-arrow-right"></i>
-                        <span class="compressed-size">${formatFileSize(result.compressedSize)}</span>
-                        <span class="savings ${result.ratio > 0 ? 'positive' : 'negative'}">
-                            ${result.ratio > 0 ? '-' : '+'}${Math.abs(result.ratio)}%
-                        </span>
-                    </div>
-                </div>
-                <button class="download-btn" onclick="downloadCompressedFile('${result.compressed.name}', '${result.compressed.type}',
-                    '${btoa(String.fromCharCode(...new Uint8Array(result.compressed.slice().arrayBuffer())))}')">
-                    <i class="fas fa-download"></i>
-                </button>
-            </div>
-        `).join('');
-        
-        updateFileCount();
-    }
-}
-
-function removeImageFile(id) {
-    imageFiles = imageFiles.filter(file => file.id !== id);
-    setupImageCompressor?.();
-}
-
-function downloadCompressedFile(filename, type, base64Data) {
-    const binaryString = atob(base64Data);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-async function downloadAllCompressed() {
-    if (compressedResults.length === 0) return;
-    
-    // For multiple files, we'll create a ZIP
-    const JSZip = window.JSZip;
-    if (!JSZip) {
-        showToast('JSZip library required for batch download', 'error');
-        return;
-    }
-    
-    const zip = new JSZip();
-    
-    compressedResults.forEach(result => {
-        zip.file(result.compressed.name, result.compressed);
-    });
-    
-    const content = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(content);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'compressed_images.zip';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-// ===== File Zipping Tool =====
-function showFileZipper() {
-    const toolHTML = `
-        <div class="tool-container">
-            <div class="tool-header">
-                <button onclick="closeTool()" class="back-btn">
-                    <i class="fas fa-arrow-left"></i>
-                    Back to Home
-                </button>
-                <h2><i class="fas fa-file-archive"></i> File Zipper</h2>
-                <p class="tool-subtitle">Upload files to create a ZIP archive. All processing happens in your browser.</p>
-            </div>
-            
-            <div class="tool-content">
-                <div class="upload-section">
-                    <div class="upload-zone" id="fileUploadZone" onclick="document.getElementById('fileInput').click()">
-                        <i class="fas fa-cloud-upload-alt"></i>
-                        <h3>Drop Files Here</h3>
-                        <p>or click to browse (Any file type)</p>
-                        <p class="file-limit">Max 50 files, 100MB total</p>
-                        <input type="file" id="fileInput" multiple>
-                    </div>
-                    <div class="file-list" id="zipFileList">
-                        <div class="empty-state">
-                            <i class="fas fa-folder-open"></i>
-                            <p>No files selected</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="settings-section">
-                    <h3>ZIP Settings</h3>
-                    <div class="settings-grid">
-                        <div class="setting">
-                            <label for="compressionLevel">Compression Level:</label>
-                            <select id="compressionLevel" class="select-input">
-                                <option value="0">No Compression (Fastest)</option>
-                                <option value="1">Fast</option>
-                                <option value="6" selected>Balanced</option>
-                                <option value="9">Maximum (Slowest)</option>
-                            </select>
-                        </div>
-                        <div class="setting">
-                            <label for="zipName">Archive Name:</label>
-                            <input type="text" id="zipName" value="archive" placeholder="Enter archive name" class="text-input">
-                        </div>
-                        <div class="setting checkbox-group">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="passwordProtect">
-                                <span class="checkbox-custom"></span>
-                                Password Protect
-                            </label>
-                            <div class="password-input-container" id="passwordContainer" style="display: none;">
-                                <input type="password" id="password" placeholder="Enter password" class="password-input">
-                                <button type="button" id="togglePassword" class="toggle-password">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="setting">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="keepStructure" checked>
-                                <span class="checkbox-custom"></span>
-                                Preserve folder structure
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="actions-section">
-                    <button id="createZipBtn" class="primary-btn" disabled>
-                        <i class="fas fa-file-archive"></i>
-                        Create ZIP Archive (<span id="zipFileCount">0</span> files)
-                    </button>
-                    <button id="clearFilesBtn" class="secondary-btn">
-                        <i class="fas fa-trash"></i>
-                        Clear All
-                    </button>
-                </div>
-                
-                <div class="results-section" id="zipResults">
-                    <div class="section-header">
-                        <h3>Archive Created</h3>
-                        <div class="summary-stats">
-                            <span id="totalSize">0 KB total</span>
-                            <span id="compressedSize">0 KB compressed</span>
-                        </div>
-                    </div>
-                    <div class="archive-info">
-                        <div class="info-item">
-                            <i class="fas fa-file"></i>
-                            <span>Files: <strong id="archiveFileCount">0</strong></span>
-                        </div>
-                        <div class="info-item">
-                            <i class="fas fa-hdd"></i>
-                            <span>Original: <strong id="originalTotalSize">0 KB</strong></span>
-                        </div>
-                        <div class="info-item">
-                            <i class="fas fa-compress-arrows-alt"></i>
-                            <span>Compressed: <strong id="archiveCompressedSize">0 KB</strong></span>
-                        </div>
-                        <div class="info-item">
-                            <i class="fas fa-percentage"></i>
-                            <span>Reduction: <strong id="archiveReduction">0%</strong></span>
-                        </div>
-                    </div>
-                    <div class="download-actions">
-                        <button id="downloadZipBtn" class="primary-btn" disabled>
-                            <i class="fas fa-download"></i>
-                            Download ZIP Archive
-                        </button>
-                        <button id="newZipBtn" class="secondary-btn">
-                            <i class="fas fa-plus"></i>
-                            Create New Archive
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    const container = document.getElementById('fileZipper');
-    container.innerHTML = toolHTML;
-    container.classList.remove('hidden');
-    setupFileZipper();
-}
-
-function setupFileZipper() {
-    zipFiles = [];
-    currentZipBlob = null;
-    
-    const fileInput = document.getElementById('fileInput');
-    const fileUploadZone = document.getElementById('fileUploadZone');
-    const zipFileList = document.getElementById('zipFileList');
-    const createZipBtn = document.getElementById('createZipBtn');
-    const clearFilesBtn = document.getElementById('clearFilesBtn');
-    const passwordProtect = document.getElementById('passwordProtect');
-    const passwordContainer = document.getElementById('passwordContainer');
-    const passwordInput = document.getElementById('password');
-    const togglePassword = document.getElementById('togglePassword');
-    const zipResults = document.getElementById('zipResults');
-    const downloadZipBtn = document.getElementById('downloadZipBtn');
-    const newZipBtn = document.getElementById('newZipBtn');
-    
-    // File upload handling
-    fileInput.addEventListener('change', handleZipFiles);
-    
-    // Drag and drop
-    fileUploadZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        fileUploadZone.classList.add('dragover');
-    });
-    
-    fileUploadZone.addEventListener('dragleave', () => {
-        fileUploadZone.classList.remove('dragover');
-    });
-    
-    fileUploadZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        fileUploadZone.classList.remove('dragover');
-        handleZipFiles({ target: { files: e.dataTransfer.files } });
-    });
-    
-    // Password protection toggle
-    passwordProtect.addEventListener('change', () => {
-        passwordContainer.style.display = passwordProtect.checked ? 'block' : 'none';
-        if (!passwordProtect.checked) {
-            passwordInput.value = '';
-        }
-    });
-    
-    // Toggle password visibility
-    togglePassword?.addEventListener('click', () => {
-        const type = passwordInput.type === 'password' ? 'text' : 'password';
-        passwordInput.type = type;
-        togglePassword.innerHTML = type === 'password' ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
-    });
-    
-    // Create ZIP button
-    createZipBtn.addEventListener('click', createZipArchive);
-    
-    // Clear button
-    clearFilesBtn.addEventListener('click', () => {
-        zipFiles = [];
-        currentZipBlob = null;
-        updateZipFileList();
-        createZipBtn.disabled = true;
-        zipResults.style.display = 'none';
-        updateZipFileCount();
-    });
-    
-    // Download button
-    downloadZipBtn.addEventListener('click', downloadZipArchive);
-    
-    // New archive button
-    newZipBtn.addEventListener('click', () => {
-        currentZipBlob = null;
-        zipResults.style.display = 'none';
-        updateZipFileCount();
-    });
-    
-    function handleZipFiles(e) {
-        const newFiles = Array.from(e.target.files);
-        
-        // Check total size
-        const totalSize = [...zipFiles, ...newFiles].reduce((sum, file) => sum + file.size, 0);
-        if (totalSize > 100 * 1024 * 1024) {
-            showToast('Total file size exceeds 100MB limit', 'error');
-            return;
-        }
-        
-        // Check file count
-        if (zipFiles.length + newFiles.length > 50) {
-            showToast('Maximum 50 files allowed', 'error');
-            return;
-        }
-        
-        // Add to zipFiles
-        newFiles.forEach(file => {
-            file.id = Date.now() + Math.random();
-            zipFiles.push(file);
-        });
-        
-        // Update UI
-        updateZipFileList();
-        createZipBtn.disabled = zipFiles.length === 0;
-        updateZipFileCount();
-        
-        // Reset input
-        fileInput.value = '';
-    }
-    
-    function updateZipFileList() {
-        const emptyState = zipFileList.querySelector('.empty-state');
-        
-        if (zipFiles.length === 0) {
-            zipFileList.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-folder-open"></i>
-                    <p>No files selected</p>
-                </div>
-            `;
-            return;
-        }
-        
-        if (emptyState) emptyState.remove();
-        
-        // Group files by folder (if they have paths)
-        const filesByFolder = {};
-        const rootFiles = [];
-        
-        zipFiles.forEach(file => {
-            const path = file.webkitRelativePath || '';
-            if (path.includes('/')) {
-                const folder = path.split('/')[0];
-                if (!filesByFolder[folder]) {
-                    filesByFolder[folder] = [];
-                }
-                filesByFolder[folder].push(file);
-            } else {
-                rootFiles.push(file);
-            }
-        });
-        
-        let html = '';
-        
-        // Add root files
-        rootFiles.forEach(file => {
-            html += createFileItemHTML(file);
-        });
-        
-        // Add folders
-        Object.entries(filesByFolder).forEach(([folder, files]) => {
-            html += `
-                <div class="folder-item">
-                    <div class="folder-header">
-                        <i class="fas fa-folder"></i>
-                        <span class="folder-name">${folder}</span>
-                        <span class="file-count">${files.length} files</span>
-                    </div>
-                    <div class="folder-contents">
-                        ${files.map(file => createFileItemHTML(file)).join('')}
-                    </div>
-                </div>
-            `;
-        });
-        
-        zipFileList.innerHTML = html;
-    }
-    
-    function createFileItemHTML(file) {
-        const icon = getFileIcon(file.name);
-        return `
-            <div class="file-item" data-id="${file.id}">
-                <div class="file-info">
-                    <i class="fas ${icon}"></i>
-                    <div class="file-details">
-                        <span class="file-name">${file.name}</span>
-                        <span class="file-size">${formatFileSize(file.size)}</span>
-                    </div>
-                </div>
-                <button class="file-remove" onclick="removeZipFile('${file.id}')">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        `;
-    }
-    
-    function updateZipFileCount() {
-        const countElement = document.getElementById('zipFileCount');
-        if (countElement) countElement.textContent = zipFiles.length;
-    }
-    
-    async function createZipArchive() {
-        if (zipFiles.length === 0) return;
-        
-        createZipBtn.disabled = true;
-        createZipBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Archive...';
-        
-        const JSZip = window.JSZip;
-        if (!JSZip) {
-            showToast('JSZip library not loaded', 'error');
-            createZipBtn.disabled = false;
-            createZipBtn.innerHTML = '<i class="fas fa-file-archive"></i> Create ZIP Archive';
-            return;
-        }
-        
-        try {
-            const zip = new JSZip();
-            const compressionLevel = parseInt(document.getElementById('compressionLevel').value);
-            const keepStructure = document.getElementById('keepStructure').checked;
-            const password = passwordProtect.checked ? passwordInput.value : null;
-            
-            // Add files to zip
-            for (const file of zipFiles) {
-                const path = keepStructure ? (file.webkitRelativePath || file.name) : file.name;
-                zip.file(path, file);
-            }
-            
-            // Generate zip
-            const options = {
-                type: 'blob',
-                compression: 'DEFLATE',
-                compressionOptions: {
-                    level: compressionLevel
-                }
-            };
-            
-            if (password) {
-                options.encryption = 'AES-256';
-                options.password = password;
-            }
-            
-            currentZipBlob = await zip.generateAsync(options);
-            
-            // Update results
-            updateZipResults();
-            zipResults.style.display = 'block';
-            downloadZipBtn.disabled = false;
-            
-            showToast('ZIP archive created successfully!', 'success');
-        } catch (error) {
-            console.error('Error creating ZIP:', error);
-            showToast('Failed to create ZIP archive', 'error');
-        } finally {
-            createZipBtn.disabled = false;
-            createZipBtn.innerHTML = '<i class="fas fa-file-archive"></i> Create ZIP Archive';
-        }
-    }
-    
-    function updateZipResults() {
-        if (!currentZipBlob) return;
-        
-        const totalSize = zipFiles.reduce((sum, file) => sum + file.size, 0);
-        const compressedSize = currentZipBlob.size;
-        const reduction = Math.round((1 - compressedSize / totalSize) * 100);
-        
-        // Update UI elements
-        document.getElementById('totalSize').textContent = `${formatFileSize(totalSize)} total`;
-        document.getElementById('compressedSize').textContent = `${formatFileSize(compressedSize)} compressed`;
-        document.getElementById('archiveFileCount').textContent = zipFiles.length;
-        document.getElementById('originalTotalSize').textContent = formatFileSize(totalSize);
-        document.getElementById('archiveCompressedSize').textContent = formatFileSize(compressedSize);
-        document.getElementById('archiveReduction').textContent = `${reduction}%`;
-    }
-}
-
-function removeZipFile(id) {
-    zipFiles = zipFiles.filter(file => file.id !== id);
-    setupFileZipper?.();
-}
-
-function downloadZipArchive() {
-    if (!currentZipBlob) return;
-    
-    const zipName = document.getElementById('zipName').value || 'archive';
-    const fileName = zipName.endsWith('.zip') ? zipName : `${zipName}.zip`;
-    
-    const url = URL.createObjectURL(currentZipBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-// ===== Utility Functions =====
+// ===== UTILITY FUNCTIONS =====
 function formatFileSize(bytes) {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -979,135 +69,571 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function getFileIcon(filename) {
-    const ext = filename.split('.').pop().toLowerCase();
+function formatPercentage(value) {
+    return Math.round(value) + '%';
+}
+
+function calculateSavings(original, compressed) {
+    const savings = original - compressed;
+    const percentage = original > 0 ? (savings / original) * 100 : 0;
+    return {
+        size: savings,
+        percentage: percentage
+    };
+}
+
+function showToast(type, title, message, duration = 5000) {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
     const icons = {
-        // Images
-        jpg: 'fa-file-image',
-        jpeg: 'fa-file-image',
-        png: 'fa-file-image',
-        gif: 'fa-file-image',
-        webp: 'fa-file-image',
-        bmp: 'fa-file-image',
-        svg: 'fa-file-image',
-        
-        // Documents
-        pdf: 'fa-file-pdf',
-        doc: 'fa-file-word',
-        docx: 'fa-file-word',
-        txt: 'fa-file-alt',
-        rtf: 'fa-file-alt',
-        
-        // Spreadsheets
-        xls: 'fa-file-excel',
-        xlsx: 'fa-file-excel',
-        csv: 'fa-file-csv',
-        
-        // Archives
-        zip: 'fa-file-archive',
-        rar: 'fa-file-archive',
-        '7z': 'fa-file-archive',
-        tar: 'fa-file-archive',
-        gz: 'fa-file-archive',
-        
-        // Code
-        js: 'fa-file-code',
-        html: 'fa-file-code',
-        css: 'fa-file-code',
-        json: 'fa-file-code',
-        xml: 'fa-file-code',
-        
-        // Default
-        default: 'fa-file'
+        success: 'check-circle',
+        error: 'exclamation-circle',
+        warning: 'exclamation-triangle',
+        info: 'info-circle'
     };
     
-    return icons[ext] || icons.default;
-}
-
-function showToast(message, type = 'info') {
-    // Remove existing toast
-    const existingToast = document.querySelector('.toast');
-    if (existingToast) existingToast.remove();
-    
-    // Create toast
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
     toast.innerHTML = `
-        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
-        <span>${message}</span>
+        <i class="fas fa-${icons[type] || 'info-circle'} toast-icon"></i>
+        <div class="toast-content">
+            <div class="toast-title">${title}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+        <button class="toast-close">
+            <i class="fas fa-times"></i>
+        </button>
     `;
     
-    document.body.appendChild(toast);
-    
-    // Show toast
-    setTimeout(() => toast.classList.add('show'), 10);
+    elements.toastContainer.appendChild(toast);
     
     // Auto remove
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    const removeToast = () => {
+        toast.style.transform = 'translateX(100%)';
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300);
+    };
+    
+    // Close button
+    toast.querySelector('.toast-close').addEventListener('click', removeToast);
+    
+    // Auto remove after duration
+    setTimeout(removeToast, duration);
 }
 
-// ===== Initialize Everything =====
-document.addEventListener('DOMContentLoaded', () => {
-    // Initialize theme
-    initializeTheme();
+// ===== FILE HANDLING =====
+function addFiles(fileList) {
+    const newFiles = Array.from(fileList).filter(file => 
+        file.type.startsWith('image/') && 
+        !state.files.some(existing => existing.name === file.name && existing.size === file.size)
+    );
+    
+    if (newFiles.length === 0) return;
+    
+    state.files.push(...newFiles);
+    updateFileList();
+    updateMetrics();
+    
+    showToast('success', 'Files Added', `Added ${newFiles.length} image${newFiles.length > 1 ? 's' : ''} to queue`);
+}
+
+function removeFile(index) {
+    const file = state.files[index];
+    state.files.splice(index, 1);
+    
+    // Also remove compressed version if exists
+    const compressedIndex = state.compressedFiles.findIndex(f => f.originalName === file.name);
+    if (compressedIndex !== -1) {
+        state.compressedFiles.splice(compressedIndex, 1);
+    }
+    
+    updateFileList();
+    updateResultsTable();
+    updateMetrics();
+    updateComparisonViewer();
+}
+
+function updateFileList() {
+    elements.fileList.innerHTML = '';
+    
+    if (state.files.length === 0) {
+        elements.fileList.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <p>No images selected</p>
+            </div>
+        `;
+        return;
+    }
+    
+    state.files.forEach((file, index) => {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'file-item';
+        fileItem.innerHTML = `
+            <div class="file-info">
+                <i class="fas fa-file-image file-icon"></i>
+                <div class="file-details">
+                    <div class="file-name">${file.name}</div>
+                    <div class="file-size">${formatFileSize(file.size)}</div>
+                </div>
+            </div>
+            <div class="file-actions">
+                <button class="file-action-btn" title="Preview" data-index="${index}" data-action="preview">
+                    <i class="fas fa-eye"></i>
+                </button>
+                <button class="file-action-btn" title="Remove" data-index="${index}" data-action="remove">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        
+        elements.fileList.appendChild(fileItem);
+    });
     
     // Add event listeners
-    themeToggle?.addEventListener('click', toggleTheme);
-    mobileMenuBtn?.addEventListener('click', toggleMobileMenu);
+    document.querySelectorAll('[data-action="remove"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.target.closest('button').dataset.index);
+            removeFile(index);
+        });
+    });
     
-    // Close mobile menu when clicking outside
-    document.addEventListener('click', (e) => {
-        if (mobileMenuBtn && navLinks && 
-            !navLinks.contains(e.target) && 
-            !mobileMenuBtn.contains(e.target)) {
-            closeMobileMenu();
+    document.querySelectorAll('[data-action="preview"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.target.closest('button').dataset.index);
+            previewFile(index);
+        });
+    });
+}
+
+// ===== SETTINGS HANDLERS =====
+function updateSliderValues() {
+    elements.qualityValue.textContent = elements.qualitySlider.value + '%';
+    elements.widthValue.textContent = elements.maxWidthSlider.value + 'px';
+}
+
+function initFormatButtons() {
+    elements.formatButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            elements.formatButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+}
+
+function initAdvancedToggle() {
+    elements.advancedToggle.addEventListener('click', () => {
+        const isActive = elements.advancedSettings.classList.toggle('show');
+        elements.advancedToggle.classList.toggle('active', isActive);
+        
+        const icon = elements.advancedToggle.querySelector('.fa-chevron-down');
+        if (icon) {
+            icon.style.transform = isActive ? 'rotate(180deg)' : 'rotate(0)';
         }
     });
-    
-    // Initialize statistics animation
-    animateStatistics();
-    
-    // Smooth scroll for anchor links
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', function (e) {
-            const href = this.getAttribute('href');
-            if (href === '#' || href === '#!') return;
-            
-            e.preventDefault();
-            const target = document.querySelector(href);
-            if (target) {
-                target.scrollIntoView({ behavior: 'smooth' });
-                closeMobileMenu();
-            }
-        });
-    });
-    
-    // Update active nav link on scroll
-    const sections = document.querySelectorAll('section[id]');
-    window.addEventListener('scroll', () => {
-        const scrollY = window.pageYOffset;
+}
+
+// ===== COMPRESSION =====
+async function compressImage(file, options, index, total) {
+    try {
+        updateLoadingProgress(index + 1, total, file.name);
         
-        sections.forEach(section => {
-            const sectionHeight = section.offsetHeight;
-            const sectionTop = section.offsetTop - 100;
-            const sectionId = section.getAttribute('id');
-            const navLink = document.querySelector(`.nav-link[href="#${sectionId}"]`);
+        const compressionOptions = {
+            maxSizeMB: options.maxSizeMB || 20,
+            maxWidthOrHeight: options.maxWidth || undefined,
+            useWebWorker: true,
+            maxIteration: options.compressionLevel || 4,
+            exifOrientation: options.preserveExif ? undefined : 1,
+            initialQuality: options.quality / 100,
+            alwaysKeepResolution: options.maintainAspect !== false
+        };
+        
+        const compressedFile = await imageCompression(file, compressionOptions);
+        
+        // Handle format conversion if needed
+        let finalFile = compressedFile;
+        const format = document.querySelector('.format-btn.active').dataset.format;
+        
+        if (format !== 'original') {
+            // In a real implementation, you would convert the format here
+            // For now, we'll just use the compressed file
+            finalFile = compressedFile;
+        }
+        
+        return {
+            file: finalFile,
+            originalSize: file.size,
+            compressedSize: finalFile.size,
+            originalName: file.name,
+            format: format
+        };
+    } catch (error) {
+        console.error('Compression error:', error);
+        throw error;
+    }
+}
+
+async processAllImages() {
+    if (state.files.length === 0 || state.isProcessing) return;
+    
+    state.isProcessing = true;
+    state.compressedFiles = [];
+    state.totalOriginalSize = 0;
+    state.totalCompressedSize = 0;
+    
+    // Show loading
+    elements.loadingOverlay.classList.add('active');
+    elements.compressBtn.disabled = true;
+    elements.compressBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    
+    // Get compression options
+    const options = {
+        quality: parseInt(elements.qualitySlider.value),
+        maxWidth: parseInt(elements.maxWidthSlider.value),
+        compressionLevel: parseInt(elements.compressionLevel.value),
+        preserveExif: elements.preserveExif.checked,
+        maintainAspect: elements.maintainAspect.checked
+    };
+    
+    try {
+        for (let i = 0; i < state.files.length; i++) {
+            const file = state.files[i];
             
-            if (scrollY > sectionTop && scrollY <= sectionTop + sectionHeight) {
-                navLink?.classList.add('active');
-            } else {
-                navLink?.classList.remove('active');
+            try {
+                const result = await compressImage(file, options, i, state.files.length);
+                state.compressedFiles.push(result);
+                
+                // Update running totals
+                state.totalOriginalSize += result.originalSize;
+                state.totalCompressedSize += result.compressedSize;
+                
+                // Update results table in real-time
+                updateResultsTable();
+                updateMetrics();
+                
+            } catch (error) {
+                console.error(`Failed to compress ${file.name}:`, error);
+                // Add error entry
+                state.compressedFiles.push({
+                    error: true,
+                    originalName: file.name,
+                    originalSize: file.size
+                });
+            }
+        }
+        
+        // Complete
+        updateComparisonViewer();
+        updateMetrics();
+        elements.downloadAllBtn.disabled = false;
+        
+        showToast('success', 'Compression Complete', 
+            `Compressed ${state.compressedFiles.length} image${state.compressedFiles.length > 1 ? 's' : ''} successfully`);
+        
+    } catch (error) {
+        showToast('error', 'Compression Failed', 'An error occurred during compression');
+    } finally {
+        // Hide loading
+        elements.loadingOverlay.classList.remove('active');
+        elements.compressBtn.disabled = false;
+        elements.compressBtn.innerHTML = '<i class="fas fa-compress-alt"></i> Compress All Images';
+        state.isProcessing = false;
+    }
+}
+
+function updateLoadingProgress(current, total, fileName) {
+    const percent = Math.round((current / total) * 100);
+    elements.progressBar.style.width = percent + '%';
+    elements.progressPercent.textContent = percent + '%';
+    elements.currentFile.textContent = fileName || 'Processing...';
+    elements.loadingText.textContent = `Processing image ${current} of ${total}`;
+}
+
+// ===== RESULTS DISPLAY =====
+function updateResultsTable() {
+    elements.resultsBody.innerHTML = '';
+    
+    if (state.compressedFiles.length === 0) {
+        elements.resultsBody.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-file-image"></i>
+                <p>No images processed yet</p>
+            </div>
+        `;
+        return;
+    }
+    
+    state.compressedFiles.forEach((result, index) => {
+        const row = document.createElement('div');
+        row.className = 'table-row';
+        
+        if (result.error) {
+            row.innerHTML = `
+                <div class="col-name">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>${result.originalName}</span>
+                </div>
+                <div class="col-original">${formatFileSize(result.originalSize)}</div>
+                <div class="col-compressed">—</div>
+                <div class="col-savings">—</div>
+                <div class="col-status">
+                    <span class="status-badge error">Error</span>
+                </div>
+            `;
+        } else {
+            const savings = calculateSavings(result.originalSize, result.compressedSize);
+            
+            row.innerHTML = `
+                <div class="col-name">
+                    <i class="fas fa-file-image"></i>
+                    <span>${result.originalName}</span>
+                </div>
+                <div class="col-original">${formatFileSize(result.originalSize)}</div>
+                <div class="col-compressed">${formatFileSize(result.compressedSize)}</div>
+                <div class="col-savings">${formatFileSize(savings.size)} (${formatPercentage(savings.percentage)})</div>
+                <div class="col-status">
+                    <span class="status-badge success">Success</span>
+                </div>
+            `;
+        }
+        
+        elements.resultsBody.appendChild(row);
+    });
+}
+
+function updateComparisonViewer() {
+    if (state.compressedFiles.length === 0 || state.compressedFiles.some(f => f.error)) {
+        elements.comparisonViewer.innerHTML = `
+            <div class="comparison-placeholder">
+                <i class="fas fa-exchange-alt"></i>
+                <p>Upload and compress images to see comparison</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Show first successful compression
+    const firstSuccess = state.compressedFiles.find(f => !f.error);
+    if (!firstSuccess) return;
+    
+    elements.comparisonViewer.innerHTML = `
+        <div class="comparison-container">
+            <div class="comparison-item">
+                <div class="comparison-label">Original (${formatFileSize(firstSuccess.originalSize)})</div>
+                <div class="comparison-image">
+                    <img src="${URL.createObjectURL(state.files.find(f => f.name === firstSuccess.originalName))}" 
+                         alt="Original">
+                </div>
+            </div>
+            <div class="comparison-item">
+                <div class="comparison-label">Compressed (${formatFileSize(firstSuccess.compressedSize)})</div>
+                <div class="comparison-image">
+                    <img src="${URL.createObjectURL(firstSuccess.file)}" 
+                         alt="Compressed">
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function updateMetrics() {
+    // Update savings
+    const savings = calculateSavings(state.totalOriginalSize, state.totalCompressedSize);
+    elements.savingsValue.textContent = formatFileSize(savings.size);
+    elements.savingsPercent.textContent = formatPercentage(savings.percentage);
+    
+    // Update data processed
+    elements.totalData.textContent = formatFileSize(state.totalOriginalSize);
+    
+    // Update average compression
+    const avg = state.compressedFiles.length > 0 && !state.compressedFiles.every(f => f.error) ? 
+        savings.percentage : 0;
+    elements.avgCompression.textContent = formatPercentage(avg);
+    
+    // Update time saved (estimate: 1MB = 1 second of download time)
+    const timeSavedSeconds = Math.round(savings.size / (1024 * 1024));
+    elements.timeSaved.textContent = `${timeSavedSeconds}s`;
+    
+    // Update memory usage (rough estimate)
+    const memoryUsed = (state.totalOriginalSize + state.totalCompressedSize) / (1024 * 1024);
+    elements.memoryUsage.textContent = memoryUsed.toFixed(1) + ' MB';
+    
+    // Update performance score
+    const score = Math.min(100, Math.max(0, 100 - (memoryUsed / 10)));
+    elements.performanceScore.textContent = Math.round(score) + '%';
+}
+
+// ===== DOWNLOAD =====
+function downloadAllCompressed() {
+    if (state.compressedFiles.length === 0 || state.compressedFiles.every(f => f.error)) {
+        showToast('warning', 'No Files', 'No compressed files available to download');
+        return;
+    }
+    
+    // For multiple files, create a ZIP
+    if (state.compressedFiles.length > 1) {
+        createAndDownloadZip();
+    } else {
+        // Single file download
+        const result = state.compressedFiles[0];
+        if (!result.error) {
+            downloadFile(result.file, `compressed_${result.originalName}`);
+        }
+    }
+}
+
+function downloadFile(file, filename) {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(file);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up URL
+    setTimeout(() => URL.revokeObjectURL(link.href), 100);
+}
+
+async function createAndDownloadZip() {
+    try {
+        elements.downloadAllBtn.disabled = true;
+        elements.downloadAllBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating ZIP...';
+        
+        // Load JSZip dynamically if needed
+        if (typeof JSZip === 'undefined') {
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+        }
+        
+        const zip = new JSZip();
+        
+        state.compressedFiles.forEach((result, index) => {
+            if (!result.error) {
+                const extension = result.format === 'original' ? 
+                    result.originalName.split('.').pop() : result.format;
+                const filename = `compressed_${result.originalName.replace(/\.[^/.]+$/, "")}.${extension}`;
+                zip.file(filename, result.file);
             }
         });
+        
+        const content = await zip.generateAsync({ type: 'blob' });
+        downloadFile(content, 'compressed_images.zip');
+        
+        showToast('success', 'Download Complete', 'All compressed files downloaded as ZIP');
+        
+    } catch (error) {
+        console.error('ZIP creation failed:', error);
+        showToast('error', 'Download Failed', 'Failed to create ZIP file');
+    } finally {
+        elements.downloadAllBtn.disabled = false;
+        elements.downloadAllBtn.innerHTML = '<i class="fas fa-download"></i> Download All';
+    }
+}
+
+async function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
     });
+}
+
+// ===== INITIALIZATION =====
+function initEventListeners() {
+    // File input
+    elements.fileInput.addEventListener('change', (e) => addFiles(e.target.files));
+    
+    // Drag and drop
+    elements.dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        elements.dropZone.classList.add('dragover');
+    });
+    
+    elements.dropZone.addEventListener('dragleave', () => {
+        elements.dropZone.classList.remove('dragover');
+    });
+    
+    elements.dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        elements.dropZone.classList.remove('dragover');
+        addFiles(e.dataTransfer.files);
+    });
+    
+    // Click to browse
+    elements.dropZone.addEventListener('click', () => {
+        elements.fileInput.click();
+    });
+    
+    // Settings sliders
+    elements.qualitySlider.addEventListener('input', updateSliderValues);
+    elements.maxWidthSlider.addEventListener('input', updateSliderValues);
+    
+    // Action buttons
+    elements.clearAllBtn.addEventListener('click', () => {
+        state.files = [];
+        state.compressedFiles = [];
+        updateFileList();
+        updateResultsTable();
+        updateComparisonViewer();
+        updateMetrics();
+        elements.downloadAllBtn.disabled = true;
+        showToast('info', 'Cleared', 'All files and results cleared');
+    });
+    
+    elements.compressBtn.addEventListener('click', processAllImages);
+    elements.downloadAllBtn.addEventListener('click', downloadAllCompressed);
+}
+
+function initPerformanceMonitoring() {
+    // Update memory usage periodically
+    setInterval(() => {
+        if (performance.memory) {
+            const usedMB = performance.memory.usedJSHeapSize / (1024 * 1024);
+            elements.memoryUsage.textContent = usedMB.toFixed(1) + ' MB';
+        }
+    }, 5000);
+}
+
+// ===== MAIN INIT =====
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize settings
+    updateSliderValues();
+    initFormatButtons();
+    initAdvancedToggle();
+    
+    // Initialize event listeners
+    initEventListeners();
+    
+    // Initialize performance monitoring
+    initPerformanceMonitoring();
+    
+    // Initial metrics update
+    updateMetrics();
+    
+    // Show welcome toast
+    setTimeout(() => {
+        showToast('info', 'Welcome to PixelPress', 
+            'Drag & drop images to start compressing. All processing happens in your browser.', 
+            8000);
+    }, 1000);
 });
 
-// ===== Global Functions for HTML onclick =====
-window.openTool = openTool;
-window.closeTool = closeTool;
-window.removeImageFile = removeImageFile;
-window.removeZipFile = removeZipFile;
-window.downloadCompressedFile = downloadCompressedFile;
+// ===== ERROR HANDLING =====
+window.addEventListener('error', (event) => {
+    console.error('Global error:', event.error);
+    showToast('error', 'Application Error', 'An unexpected error occurred. Please refresh the page.');
+});
+
+// ===== PWA SUPPORT =====
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(error => {
+            console.log('ServiceWorker registration failed:', error);
+        });
+    });
+}
+
